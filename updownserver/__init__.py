@@ -847,7 +847,7 @@ def print_qr_codes():
 
     print('\nScan to connect from mobile:')
     for ip in ips:
-        url = f'{protocol}::{ip}:{port}/'
+        url = f'{protocol}://{ip}:{port}/'
         # qrcode.make() returns an image, relying on terminal support is tricky
         # Better to use qrcode.ConsoleASCIIQRCode (if available) or print_ascii
         qr = qrcode.QRCode()
