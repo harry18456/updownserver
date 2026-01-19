@@ -8,9 +8,6 @@ ifneq ($(VERBOSE), 0)
 	PYTEST_ARGS:=$(PYTEST_ARGS) --capture no
 endif
 
-test-all: server.pem client.pem client.crt
-	./test-all.sh
-
 test: server.pem client.pem client.crt
 	rm -rf test-temp
 	PROTOCOL=$(PROTOCOL) VERBOSE=$(VERBOSE) venv-$(PY)/bin/python -u \
