@@ -13,14 +13,9 @@ test: server.pem client.pem client.crt
 	PROTOCOL=$(PROTOCOL) VERBOSE=$(VERBOSE) venv-$(PY)/bin/python -u \
 		-m pytest $(PYTEST_ARGS) $(TEST)
 
-test-travis: server.pem client.pem client.crt
-	rm -rf test-temp
-	PROTOCOL=HTTP VERBOSE=0 python -u -m pytest --tb short test.py
-	rm -rf test-temp
-	PROTOCOL=HTTPS VERBOSE=0 python -u -m pytest --tb short test.py
+
 
 install-dev:
-	chmod 775 test-all.sh
 	$(PY) -m venv venv-$(PY)
 	venv-$(PY)/bin/python -m pip install --upgrade pip
 	venv-$(PY)/bin/python -m pip install pytest requests
