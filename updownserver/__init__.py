@@ -496,8 +496,13 @@ def check_http_authentication(handler: http.server.BaseHTTPRequestHandler
             if not args.basic_auth:
                 return True
             
+            # For paths outside /upload (read ops), if both auths are supplied,
+            # both are accepted.
             valid, message = check_http_authentication_header(handler,
                 args.basic_auth)
+            if not valid:
+                valid, message = check_http_authentication_header(handler,
+                    args.basic_auth_upload)
     
     if not valid:
         handler.send_response(http.HTTPStatus.UNAUTHORIZED)

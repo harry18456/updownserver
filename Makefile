@@ -36,7 +36,7 @@ client.pem:
 client.crt:
 	openssl x509 -in client.pem -out client.crt
 
-package: uploadserver/__init__.py uploadserver/__main__.py LICENSE README.md setup.py
+package: updownserver/__init__.py updownserver/__main__.py LICENSE README.md setup.py
 	$(PY) -m pip install --user --upgrade setuptools wheel
 	$(PY) setup.py sdist bdist_wheel
 
@@ -47,4 +47,4 @@ upload: dist/*
 	$(PY) -m pip uninstall -y keyring
 
 clean:
-	rm -rf build dist uploadserver/__pycache__ uploadserver.egg-info __pycache__ test-temp server.pem client.pem client.crt
+	rm -rf build dist updownserver/__pycache__ updownserver.egg-info __pycache__ test-temp server.pem client.pem client.crt

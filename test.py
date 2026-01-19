@@ -29,9 +29,12 @@ server_holder = [None]
 ####################
 
 def setup_module():
-    os.mkdir(Path(__file__).parent / 'test-temp')
-    os.chdir(Path(__file__).parent / 'test-temp')
-    os.symlink('../uploadserver', 'uploadserver')
+    test_temp = Path(__file__).parent / 'test-temp'
+    if test_temp.exists():
+        shutil.rmtree(test_temp)
+    os.mkdir(test_temp)
+    os.chdir(test_temp)
+    # os.symlink('../updownserver', 'updownserver') # Not needed if installed
     os.mkdir('directory-option-test')
 
 def setup_function():
@@ -350,8 +353,8 @@ def test_directory_listing_injections():
     res = get('/')
     assert res.status_code == 200
     assert int(res.headers['Content-Length']) == len(res.text)
-    assert '<!-- Injected by uploadserver -->' in res.text
-    assert '<a href="/upload">File upload</a>' in res.text
+    assert '<!-- Injected by updownserver -->' in res.text
+    assert 'id="drop-zone"' in res.text
 
 # Test this on the CGI variant too, to validate the funny inheritance pattern
 def test_directory_listing_injections_cgi():
@@ -360,8 +363,8 @@ def test_directory_listing_injections_cgi():
     res = get('/')
     assert res.status_code == 200
     assert int(res.headers['Content-Length']) == len(res.text)
-    assert '<!-- Injected by uploadserver -->' in res.text
-    assert '<a href="/upload">File upload</a>' in res.text
+    assert '<!-- Injected by updownserver -->' in res.text
+    assert 'id="drop-zone"' in res.text
 
 if PROTOCOL == 'HTTPS':
     def test_client_cert_valid():
@@ -406,7 +409,7 @@ if PROTOCOL == 'HTTPS':
         shutil.copyfile('../server.pem', 'server.pem')
         
         result = subprocess.run(
-            ['python', '-m', 'uploadserver', '-c', 'server.pem'],
+            ['python', '-m', 'updownserver', '-c', 'server.pem'],
             stdout=None if VERBOSE else subprocess.DEVNULL,
             stderr=None if VERBOSE else subprocess.DEVNULL,
         )
@@ -496,7 +499,7 @@ def test_http_basic_auth_example():
 if sys.version_info.major == 3 and sys.version_info.minor == 13:
     def test_help_info_in_readme():
         result = subprocess.run([
-                sys.executable, '-u', '-m', 'uploadserver', '-h',
+                sys.executable, '-u', '-m', 'updownserver', '-h',
             ],
             capture_output=True,
             env={ 'COLUMNS': '80' },
@@ -529,7 +532,7 @@ def spawn_server(
     basic_auth: requests.auth.HTTPBasicAuth = None,
     basic_auth_upload: requests.auth.HTTPBasicAuth = None,
 ):
-    args = [sys.executable, '-u', '-m', 'uploadserver']
+    args = [sys.executable, '-u', '-m', 'updownserver']
     if port: args += [str(port)]
     if cgi: args += ['--cgi']
     if allow_replace: args += ['--allow-replace']
