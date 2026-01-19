@@ -170,8 +170,8 @@ usage: __main__.py [-h] [--cgi] [--allow-replace] [--bind ADDRESS]
                    [--server-certificate SERVER_CERTIFICATE]
                    [--client-certificate CLIENT_CERTIFICATE]
                    [--basic-auth BASIC_AUTH]
-                   [--basic-auth-upload BASIC_AUTH_UPLOAD]
-                   [--timeout TIMEOUT] [--qr]
+                   [--basic-auth-upload BASIC_AUTH_UPLOAD] [--timeout TIMEOUT]
+                   [--qr]
                    [port]
 
 positional arguments:
@@ -206,6 +206,7 @@ options:
                         [default: 300]
   --qr                  Show QR code at startup
 ```
+
 
 
 
