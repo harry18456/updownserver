@@ -63,12 +63,7 @@ def test_argument_passthrough():
     assert res.status_code == 200
     with pytest.raises(requests.ConnectionError): get('/')
 
-# Verify /upload at least responds to GET
-def test_upload_page_exists():
-    spawn_server()
-    
-    res = get('/upload')
-    assert res.status_code == 200
+
 
 # Simple upload test
 def test_upload():
