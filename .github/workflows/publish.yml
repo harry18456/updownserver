@@ -6,8 +6,39 @@ on:
       - 'v*'
 
 jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest requests
+      - name: Run Tests
+        run: |
+          # Generate certificates
+          openssl req -x509 -out server.pem -keyout server.pem -newkey rsa:3072 -nodes -sha256 -subj '/CN=server' -days 10000
+          openssl req -x509 -out client.pem -keyout client.pem -newkey rsa:3072 -nodes -sha256 -subj '/CN=client' -days 10000
+          openssl x509 -in client.pem -out client.crt
+          
+          # Install package
+          python -m pip install -e .[qr]
+          
+          # Run tests
+          PROTOCOL=HTTP VERBOSE=0 python -u -m pytest --tb short test.py
+          PROTOCOL=HTTPS VERBOSE=0 python -u -m pytest --tb short test.py
+
   build:
     name: Build Package
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
