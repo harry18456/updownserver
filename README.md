@@ -1,14 +1,26 @@
-# uploadserver
+# updownserver
 
-Python's http.server extended to include a file upload page
+A lightweight HTTP server with unified upload/download interface.
+Based on the excellent [uploadserver](https://github.com/Densaugeo/uploadserver) by Densaugeo.
+
+[繁體中文說明 (Traditional Chinese)](README_zh-tw.md)
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://mit-license.org/)
 [![Build Status](https://app.travis-ci.com/Densaugeo/uploadserver.svg?branch=master)](https://app.travis-ci.com/github/Densaugeo/uploadserver)
 
+## Key Features
+
+*   **Unified Interface**: Drag & drop uploads, file management, and downloads all in one page.
+*   **File Management**: Create folders and delete files directly from the web UI.
+*   **Mobile Friendly**: Generate a QR code in the terminal for easy mobile access.
+*   **Security First**: Auto-shutdown timer (default 5 mins) and enforcing timeouts for unauthenticated sessions.
+*   **Docker Support**: Ready-to-use Dockerfile for containerized deployment.
+*   **Zero Dependency**: Core features run with standard Python libraries.
+
 ## Supported Platforms
 
 | Platform | Supported? | Notes |
-|-|-|-|
+|---|---|---|
 | Python 3.9+ | Yes | Tested on 3.9 through 3.14 every release. |
 | Python 3.6-3.8 | No | Was supported by previous versions. |
 | Python 3.5- | No | |
@@ -19,18 +31,60 @@ Python's http.server extended to include a file upload page
 ## Installation
 
 ~~~bash
-python3 -m pip install --user uploadserver
+python3 -m pip install --user updownserver
+# Optional: Install query dependencies for QR code support
+python3 -m pip install --user updownserver[qr]
+
+# Or using uv (Recommended for speed)
+uv pip install updownserver[qr]
+~~~
+
+## Docker Support
+
+Build the image:
+~~~bash
+docker build -t updownserver .
+~~~
+
+Run sharing the current directory (mapped to `/data` in the container):
+~~~bash
+# Linux/Mac
+docker run -p 8000:8000 -v $(pwd):/data updownserver
+
+# Windows (PowerShell)
+docker run -p 8000:8000 -v ${PWD}:/data updownserver
+~~~
+
+Run with custom arguments (e.g., auto-shutdown disabled):
+~~~bash
+docker run -p 8000:8000 -v $(pwd):/data updownserver --timeout 0 --basic-auth user:pass
 ~~~
 
 ## Usage
 
+Start the server:
 ~~~bash
-python3 -m uploadserver
+python3 -m updownserver
 ~~~
 
-Accepts the same options as [http.server](https://docs.python.org/3/library/http.server.html), plus a couple extras (documented below).
+Show a QR code for mobile connection (requires `updownserver[qr]`):
+~~~bash
+python3 -m updownserver --qr
+~~~
 
-After the server starts, the upload page is at /upload. For example, if the server is running at http://localhost:8000/ go to http://localhost:8000/upload .
+To prevent forgetting to close the server, it auto-shutdowns after 300 seconds (5 minutes) by default.
+To run indefinitely (**authentication required** for security):
+~~~bash
+python3 -m updownserver --timeout 0 --basic-auth user:pass
+~~~
+
+After the server starts, the unified upload/download interface is at the root URL.
+This main page allows you to:
+- **Download files**: Click on any file in the list.
+- **Upload files**: Drag and drop files into the upload zone or use the file selector.
+- **Manage files**: Create new folders or delete files (trash icon) directly from the UI. (**Note**: For security, these operations are disabled if no authentication is configured.)
+
+The POST endpoint `/upload` is still available for programmatic access (e.g. cURL).
 
 Warning: This is an upload server, and running it will allow uploads.
 
@@ -42,7 +96,7 @@ curl -X POST http://127.0.0.1:8000/upload -F 'files=@multiple-example-1.txt' -F 
 ## Basic Authentication (downloads and uploads)
 
 ~~~bash
-python3 -m uploadserver --basic-auth hello:world
+python3 -m updownserver --basic-auth hello:world
 ~~~
 
 Now you can upload with basic authentication. For example:
@@ -55,7 +109,7 @@ All requests without authentication will be rejected. Note that basic authentica
 ## Basic Authentication (uploads only)
 
 ~~~bash
-python3 -m uploadserver --basic-auth-upload hello:world
+python3 -m updownserver --basic-auth-upload hello:world
 ~~~
 
 The same as above, but authentication is only required for upload operations.
@@ -66,11 +120,11 @@ If both `--basic-auth` and `--basic-auth-upload` are specified, all requests wil
 
 The upload page supports a dark mode for showing white text on black background. If no option is specified, the color scheme is chosen from the client’s browser’s preference (which typically matches their operating system’s setting, if light or dark mode is supported by the OS). To enforce the light or dark theme, the CLI parameter `--theme` can be used:
 ~~~bash
-python3 -m uploadserver --theme light
+python3 -m updownserver --theme light
 ~~~
 or
 ~~~bash
-python3 -m uploadserver --theme dark
+python3 -m updownserver --theme dark
 ~~~
 
 ## HTTPS Option
@@ -82,7 +136,7 @@ openssl req -x509 -out server.pem -keyout server.pem -newkey rsa:2048 -nodes -sh
 
 # The server root should not contain the certificate, for security reasons
 cd server-root
-python3 -m uploadserver --server-certificate server.pem
+python3 -m updownserver --server-certificate server.pem
 
 # Connect as a client
 curl -X POST https://localhost:8000/upload --insecure -F files=@simple-example.txt
@@ -101,7 +155,7 @@ openssl x509 -in client.pem -out client.crt
 
 # The server root should not contain the certificates, for security reasons
 cd server-root
-python3 -m uploadserver --server-certificate server.pem --client-certificate client.crt
+python3 -m updownserver --server-certificate server.pem --client-certificate client.crt
 
 # Connect as a client
 curl -X POST https://localhost:8000/upload --insecure --cert client.pem -F files=@mtls-example.txt
@@ -118,6 +172,7 @@ usage: __main__.py [-h] [--cgi] [--allow-replace] [--bind ADDRESS]
                    [--client-certificate CLIENT_CERTIFICATE]
                    [--basic-auth BASIC_AUTH]
                    [--basic-auth-upload BASIC_AUTH_UPLOAD]
+                   [--timeout TIMEOUT] [--qr]
                    [port]
 
 positional arguments:
@@ -148,48 +203,14 @@ options:
   --basic-auth-upload BASIC_AUTH_UPLOAD
                         Specify user:pass for basic authentication (uploads
                         only)
+  --timeout TIMEOUT     Auto-shutdown server after N seconds (0 to disable)
+                        [default: 300]
+  --qr                  Show QR code at startup
 ```
 
-## Breaking Changes in 6.0.0
 
-- Support for Python 3.8 dropped.
-
-## Breaking Changes in 5.0.0
-
-- Support for Python 3.6-7 dropped.
-- `--token` option removed (use `--basic-auth` or `--basic-auth-upload` instead).
-
-## Breaking Changes in 4.0.0
-
-- By default, uploaded files which have the same name as an existing file are renamed. To restore the previous behavior of overwriting them, pass `--allow-replace`.
-- File uploads with no files in them are rejected with 400 Bad Request instead of 500 Internal Server Error, with a more informative error message.
-- Handling of large uploads has been improved. Theoretically this should not cause any breaking changes, but filesystems are black magic and should be viewed with suspicion.
-
-## Breaking Changes in 3.0.0
-
-- If `serve_forever` is called directly, such as by an extension, the `theme` field is now required on the arguments object. This change will not affect users who run this module unmodified.
-
-## Breaking Changes in 2.0.0
-
-- File uploads now respect the `--directory` option. Not doing so was a bug, and a security risk (since it could to the server root containing the server's certificate without the user realizing).
-- The `--token` option, if supplied, must be given a value. Not requiring a value was a bug, and a security risk (since a user could specify the token option but forget to provide a token).
-- Some internal refactoring was done to support creating extensions. This does not affect command line use.
-
-## Breaking Changes in 1.0.0
-
-- File field in upload form renamed from `file_1` to `files`, to reflect support for multiple file upload. Scripts using cURL will need to be upadted with the new field name.
-- Successful uploads now respond with 204 No Content instead of 200 OK, so that cURL will not default to printing the upload page at the terminal.
 
 ## Acknowledgements
 
-Much of `main()` was copied from Python's `http.server`.
+Special thanks to [Densaugeo](https://github.com/Densaugeo) and all contributors of the original [uploadserver](https://github.com/Densaugeo/uploadserver) project for providing the solid foundation for this tool.
 
-Thanks to lishoujun for sending the first pull request! (Added the token option.)
-
-Thanks to NteRySin for several improvements including mTLS support and refactoring to support use by other modules.
-
-Thanks to marvinruder for work on the upload progress indicator, theme option, and pre-validation of tokens before upload.
-
-Thanks to shuangye for finding an easy way to handle large file uploads, and improved handling of filename collisions.
-
-Thanks to abbbe for adding HTTP basic auth (has now replaced the token option).

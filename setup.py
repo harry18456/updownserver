@@ -1,25 +1,28 @@
 import setuptools
 
-with open('README.md', 'r') as fh:
+with open('README.md', 'r', encoding='utf-8') as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name='uploadserver',
-    version='6.0.0',
-    author='Densaugeo',
+    name='updownserver',
+    version='0.1.0',
+    author='Harry (Original by Densaugeo)',
     author_email='author@example.com',
-    description='Python\'s http.server extended to include a file upload page',
+    description='A lightweight HTTP server with unified upload/download interface',
     long_description=long_description,
     long_description_content_type='text/markdown',
-    url='https://github.com/Densaugeo/uploadserver',
-    packages=['uploadserver'],
+    url='https://github.com/harry18456/updownserver',
+    packages=['updownserver'],
     classifiers=[
         'Programming Language :: Python :: 3',
         'License :: OSI Approved :: MIT License',
         'Operating System :: OS Independent',
     ],
     python_requires='>=3.9',
+    extras_require={
+        'qr': ['qrcode'],
+    },
     entry_points = {
-        'console_scripts': ['uploadserver=uploadserver:main'],
+        'console_scripts': ['updownserver=updownserver:main'],
     }
 )
