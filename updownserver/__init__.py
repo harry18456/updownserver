@@ -515,10 +515,17 @@ def check_http_authentication(handler: http.server.BaseHTTPRequestHandler
 class ListDirectoryInterception:
     # Only runs when serving directory listings
     def flush_headers_interceptor(self):
+        # Calculate auth state for delete JS injection size matching copyfile_interceptor
+        has_auth = args.basic_auth or args.basic_auth_upload or args.client_certificate
+        enable_delete_js = b'<script>const ENABLE_DELETE = ' + \
+            (b'true' if has_auth else b'false') + b';</script>'
+
         for i, header in enumerate(self._headers_buffer):
             if header[:15] == b'Content-Length:':
                 length = int(header[15:]) + len(DIRECTORY_BODY_INJECTION) + \
-                    len(get_directory_head_injection(args.theme))
+                    len(get_directory_head_injection(args.theme)) + \
+                    len(enable_delete_js) + \
+                    len(get_shutdown_timer_injection())
                 
                 # Use same encoding that self.send_header() uses
                 self._headers_buffer[i] = f'Content-Length: {length}\r\n' \
