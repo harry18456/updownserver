@@ -27,7 +27,16 @@ jobs:
         python -m pip install --upgrade pip
         python -m pip install pytest requests
 
-    - name: Generate certificates and Run Tests
+    - name: Run Tests
       run: |
-        # Makefile handles certificate generation and running tests
-        make test-travis
+        # Generate certificates
+        openssl req -x509 -out server.pem -keyout server.pem -newkey rsa:3072 -nodes -sha256 -subj '/CN=server' -days 10000
+        openssl req -x509 -out client.pem -keyout client.pem -newkey rsa:3072 -nodes -sha256 -subj '/CN=client' -days 10000
+        openssl x509 -in client.pem -out client.crt
+        
+        # Install package
+        python -m pip install -e .[qr]
+        
+        # Run tests
+        PROTOCOL=HTTP VERBOSE=0 python -u -m pytest --tb short test.py
+        PROTOCOL=HTTPS VERBOSE=0 python -u -m pytest --tb short test.py
