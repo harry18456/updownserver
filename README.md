@@ -6,7 +6,6 @@ Based on the excellent [uploadserver](https://github.com/Densaugeo/uploadserver)
 [繁體中文說明 (Traditional Chinese)](README_zh-tw.md)
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://mit-license.org/)
-[![Build Status](https://app.travis-ci.com/Densaugeo/uploadserver.svg?branch=master)](https://app.travis-ci.com/github/Densaugeo/uploadserver)
 
 ## Key Features
 

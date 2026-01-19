@@ -4,7 +4,6 @@
 基於 Densaugeo 優異的 [uploadserver](https://github.com/Densaugeo/uploadserver) 專案修改而來。
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://mit-license.org/)
-[![Build Status](https://app.travis-ci.com/Densaugeo/uploadserver.svg?branch=master)](https://app.travis-ci.com/github/Densaugeo/uploadserver)
 
 ## 主要功能
 
