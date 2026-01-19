@@ -7,7 +7,7 @@ setuptools.setup(
     name='updownserver',
     version='0.1.0',
     author='Harry (Original by Densaugeo)',
-    author_email='author@example.com',
+    author_email='harry18456@gmail.com',
     description='A lightweight HTTP server with unified upload/download interface',
     long_description=long_description,
     long_description_content_type='text/markdown',
