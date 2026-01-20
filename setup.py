@@ -5,7 +5,7 @@ with open('README.md', 'r', encoding='utf-8') as fh:
 
 setuptools.setup(
     name='updownserver',
-    version='1.0.2',
+    version='1.0.3',
     author='Harry (Original by Densaugeo)',
     author_email='harry18456@gmail.com',
     description='A lightweight HTTP server with unified upload/download interface',

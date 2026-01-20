@@ -1,4 +1,4 @@
-import http.server, http, pathlib, sys, argparse, ssl, os, builtins, tempfile, threading
+import http.server, http, pathlib, sys, argparse, ssl, os, builtins, tempfile, threading, shutil
 import base64, binascii, functools, contextlib
 
 # Does not seem to do be used, but leaving this import out causes updownserver
@@ -42,6 +42,56 @@ def get_directory_head_injection(theme: str) -> bytes:
             --zone-bg: #1e1e1e;
             --zone-hover: #2d2d2d;
         }
+    }
+    
+    /* Breadcrumb navigation */
+    .breadcrumb-nav {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        padding: 10px 15px;
+        background-color: var(--zone-bg);
+        border-radius: 8px;
+        margin-bottom: 15px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    
+    .breadcrumb-nav a {
+        color: var(--accent-color);
+        text-decoration: none;
+    }
+    
+    .breadcrumb-nav a:hover {
+        text-decoration: underline;
+    }
+    
+    .breadcrumb-nav .separator {
+        color: var(--text-color);
+        opacity: 0.5;
+    }
+    
+    .breadcrumb-nav .current {
+        color: var(--text-color);
+        font-weight: bold;
+    }
+    
+    .back-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 5px 10px;
+        background-color: var(--accent-color);
+        color: white;
+        text-decoration: none;
+        border-radius: 4px;
+        font-size: 14px;
+        margin-right: 10px;
+    }
+    
+    .back-btn:hover {
+        opacity: 0.9;
+        text-decoration: none;
     }
     
     .upload-widget {
@@ -88,7 +138,11 @@ def get_directory_head_injection(theme: str) -> bytes:
 <!-- End injection by updownserver -->
 ''', 'utf-8')
 
+
 DIRECTORY_BODY_INJECTION = b'''<!-- Injected by updownserver -->
+<!-- Breadcrumb Navigation -->
+<div class="breadcrumb-nav" id="breadcrumb-nav"></div>
+
 <div class="upload-widget" id="drop-zone" onclick="document.getElementById('file-input').click()">
     <h3>Drag and drop files here to upload</h3>
     <p>or click to select components</p>
@@ -108,6 +162,32 @@ DIRECTORY_BODY_INJECTION = b'''<!-- Injected by updownserver -->
 </div>
 
 <script>
+    // Generate breadcrumb navigation
+    (function() {
+        const nav = document.getElementById('breadcrumb-nav');
+        const path = decodeURIComponent(window.location.pathname);
+        const parts = path.split('/').filter(p => p);
+        
+        let html = '';
+        
+        // Home link
+        html += '<a href="/">[Home]</a>';
+        
+        // Build path breadcrumbs
+        let currentPath = '';
+        for (let i = 0; i < parts.length; i++) {
+            html += '<span class="separator">/</span>';
+            currentPath += '/' + parts[i];
+            if (i === parts.length - 1) {
+                html += '<span class="current">' + parts[i] + '</span>';
+            } else {
+                html += '<a href="' + currentPath + '/">' + parts[i] + '</a>';
+            }
+        }
+        
+        nav.innerHTML = html;
+    })();
+
     // Initialize UI based on Auth
     document.addEventListener('DOMContentLoaded', () => {
         if (typeof ENABLE_DELETE !== 'undefined' && ENABLE_DELETE) {
@@ -139,29 +219,106 @@ DIRECTORY_BODY_INJECTION = b'''<!-- Injected by updownserver -->
         dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
     });
 
-    // Handle dropped files
-    dropZone.addEventListener('drop', (e) => {
+    // Handle dropped files and folders
+    dropZone.addEventListener('drop', async (e) => {
         const dt = e.dataTransfer;
+        const items = dt.items;
+        
+        // Check if we have items (for folder support)
+        if (items && items.length > 0) {
+            const allFiles = [];
+            const entries = [];
+            
+            // Collect all entries first
+            for (let i = 0; i < items.length; i++) {
+                const entry = items[i].webkitGetAsEntry && items[i].webkitGetAsEntry();
+                if (entry) {
+                    entries.push(entry);
+                }
+            }
+            
+            if (entries.length > 0) {
+                statusDiv.textContent = 'Reading files...';
+                
+                // Process all entries (files and directories)
+                for (const entry of entries) {
+                    await traverseFileTree(entry, '', allFiles);
+                }
+                
+                if (allFiles.length > 0) {
+                    uploadFilesWithPaths(allFiles);
+                } else {
+                    statusDiv.textContent = 'No files found.';
+                }
+                return;
+            }
+        }
+        
+        // Fallback for browsers without webkitGetAsEntry
         const files = dt.files;
         handleFiles(files);
     });
 
-    function handleFiles(files) {
-        if (files.length === 0) return;
-        uploadFiles(files);
+    // Recursively traverse file tree for folder drops
+    async function traverseFileTree(entry, path, allFiles) {
+        if (entry.isFile) {
+            return new Promise((resolve) => {
+                entry.file((file) => {
+                    // Store file with its relative path
+                    allFiles.push({ file: file, path: path + file.name });
+                    resolve();
+                }, () => resolve()); // Ignore errors for individual files
+            });
+        } else if (entry.isDirectory) {
+            const dirReader = entry.createReader();
+            const entries = await readAllDirectoryEntries(dirReader);
+            for (const childEntry of entries) {
+                await traverseFileTree(childEntry, path + entry.name + '/', allFiles);
+            }
+        }
     }
 
-    function uploadFiles(files) {
+    // Read all entries from a directory (handles batching)
+    function readAllDirectoryEntries(dirReader) {
+        return new Promise((resolve) => {
+            const allEntries = [];
+            
+            function readEntries() {
+                dirReader.readEntries((entries) => {
+                    if (entries.length === 0) {
+                        resolve(allEntries);
+                    } else {
+                        allEntries.push(...entries);
+                        readEntries(); // Continue reading (entries are batched)
+                    }
+                }, () => resolve(allEntries)); // Ignore errors
+            }
+            
+            readEntries();
+        });
+    }
+
+    function handleFiles(files) {
+        if (files.length === 0) return;
+        // Convert FileList to array of {file, path} objects
+        const filesWithPaths = Array.from(files).map(f => ({ file: f, path: f.name }));
+        uploadFilesWithPaths(filesWithPaths);
+    }
+
+    function uploadFilesWithPaths(filesWithPaths) {
         const url = '/upload';
         const formData = new FormData();
-        const fileNames = [];
 
-        for (let i = 0; i < files.length; i++) {
-            formData.append('files', files[i]);
-            fileNames.push(files[i].name);
+        // Get current directory path from URL
+        const currentPath = decodeURIComponent(window.location.pathname);
+        formData.append('path', currentPath);
+
+        for (const item of filesWithPaths) {
+            formData.append('files', item.file);
+            formData.append('filenames', item.path); // Send relative path
         }
 
-        statusDiv.textContent = `Uploading ${files.length} file(s)...`;
+        statusDiv.textContent = `Uploading ${filesWithPaths.length} file(s)...`;
 
         const xhr = new XMLHttpRequest();
         xhr.open('POST', url, true);
@@ -200,6 +357,9 @@ DIRECTORY_BODY_INJECTION = b'''<!-- Injected by updownserver -->
 
         const formData = new FormData();
         formData.append('foldername', foldername);
+        // Get current directory path from URL
+        const currentPath = decodeURIComponent(window.location.pathname);
+        formData.append('path', currentPath);
 
         fetch('/mkdir', {
             method: 'POST',
@@ -219,10 +379,8 @@ DIRECTORY_BODY_INJECTION = b'''<!-- Injected by updownserver -->
     }
 
     // --- New Feature: Delete Buttons ---
-    // Inject delete buttons into the file list
+    // Inject delete buttons and file info into the file list
     document.addEventListener('DOMContentLoaded', () => {
-        if (typeof ENABLE_DELETE !== 'undefined' && !ENABLE_DELETE) return;
-        
         const list = document.querySelector('ul');
         if (!list) return;
 
@@ -235,23 +393,71 @@ DIRECTORY_BODY_INJECTION = b'''<!-- Injected by updownserver -->
             // Skip parent directory link
             if (name === '../' || name === '..') return;
 
-            const delBtn = document.createElement('span');
-            delBtn.innerHTML = ' &#128465;'; // Trash can icon
-            delBtn.style.cursor = 'pointer';
-            delBtn.style.color = 'red';
-            delBtn.style.marginLeft = '10px';
-            delBtn.title = 'Delete';
-            
-            delBtn.onclick = (e) => {
-                e.preventDefault();
-                if (confirm(`Delete "${decodeURIComponent(name)}"?`)) {
-                    deleteFile(name);
-                }
-            };
-            
-            li.appendChild(delBtn);
+            // Add file info span
+            const infoSpan = document.createElement('span');
+            infoSpan.style.marginLeft = '15px';
+            infoSpan.style.color = 'gray';
+            infoSpan.style.fontSize = '0.85em';
+            infoSpan.textContent = '';
+            li.appendChild(infoSpan);
+
+            // Fetch file info using HEAD request
+            fetch(name, { method: 'HEAD' })
+                .then(response => {
+                    const size = response.headers.get('Content-Length');
+                    const modified = response.headers.get('Last-Modified');
+                    let info = [];
+                    
+                    if (size && !name.endsWith('/')) {
+                        info.push(formatFileSize(parseInt(size)));
+                    }
+                    if (modified) {
+                        info.push(formatDate(modified));
+                    }
+                    
+                    if (info.length > 0) {
+                        infoSpan.textContent = '(' + info.join(', ') + ')';
+                    }
+                })
+                .catch(() => {});
+
+            // Add delete button if auth enabled
+            if (typeof ENABLE_DELETE !== 'undefined' && ENABLE_DELETE) {
+                const delBtn = document.createElement('span');
+                delBtn.innerHTML = ' &#128465;'; // Trash can icon
+                delBtn.style.cursor = 'pointer';
+                delBtn.style.color = 'red';
+                delBtn.style.marginLeft = '10px';
+                delBtn.title = 'Delete';
+                
+                delBtn.onclick = (e) => {
+                    e.preventDefault();
+                    if (confirm(`Delete "${decodeURIComponent(name)}"?`)) {
+                        deleteFile(name);
+                    }
+                };
+                
+                li.appendChild(delBtn);
+            }
         });
     });
+
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    function formatDate(dateStr) {
+        try {
+            const date = new Date(dateStr);
+            return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        } catch (e) {
+            return dateStr;
+        }
+    }
 
     function deleteFile(filename) {
         fetch(filename, {
@@ -312,21 +518,66 @@ def receive_upload(handler: http.server.BaseHTTPRequestHandler,
     if 'files' not in form:
         return (http.HTTPStatus.BAD_REQUEST, 'Field "files" not found')
     
+    # Get the target path from form data (current directory in browser)
+    upload_path = form.getvalue('path', '/')
+    # Remove leading slash and sanitize
+    upload_path = upload_path.lstrip('/')
+    # Build target directory, validate it's within the served directory
+    target_dir = pathlib.Path(args.directory) / upload_path
+    target_dir = target_dir.resolve()
+    server_root = pathlib.Path(args.directory).resolve()
+    
+    # Security check: ensure target is within server root
+    if server_root not in target_dir.parents and server_root != target_dir:
+        return (http.HTTPStatus.FORBIDDEN, 'Invalid upload path')
+    
+    if not target_dir.is_dir():
+        return (http.HTTPStatus.BAD_REQUEST, 'Target directory does not exist')
+    
     fields = form['files']
     if not isinstance(fields, list):
         fields = [fields]
     
+    # Get custom filenames (with relative paths for folder uploads)
+    filenames_list = []
+    if 'filenames' in form:
+        filenames_data = form['filenames']
+        if isinstance(filenames_data, list):
+            filenames_list = [f.value for f in filenames_data]
+        else:
+            filenames_list = [filenames_data.value]
+    
     if not all(field.file and field.filename for field in fields):
         return (http.HTTPStatus.BAD_REQUEST, 'No files selected')
     
-    for field in fields:
+    for idx, field in enumerate(fields):
         if field.file and field.filename:
-            filename = pathlib.Path(field.filename).name
+            # Use custom filename (with path) if provided, otherwise use original filename
+            if idx < len(filenames_list) and filenames_list[idx]:
+                relative_path = filenames_list[idx]
+                # Sanitize: remove leading slashes and normalize
+                relative_path = relative_path.lstrip('/\\')
+                # Security: prevent directory traversal
+                relative_path = os.path.normpath(relative_path)
+                if relative_path.startswith('..') or os.path.isabs(relative_path):
+                    relative_path = pathlib.Path(field.filename).name
+            else:
+                relative_path = pathlib.Path(field.filename).name
         else:
-            filename = None
+            relative_path = None
         
-        if filename:
-            destination = pathlib.Path(args.directory) / filename
+        if relative_path:
+            destination = target_dir / relative_path
+            destination = destination.resolve()
+            
+            # Security check: ensure destination is still within server root
+            if server_root not in destination.parents and server_root != destination.parent:
+                handler.log_message('[Upload Rejected] Path traversal attempt: %s', relative_path)
+                continue
+            
+            # Create parent directories if needed (for folder uploads)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            
             if os.path.exists(destination):
                 if args.allow_replace and os.path.isfile(destination):
                     os.remove(destination)
@@ -342,7 +593,7 @@ def receive_upload(handler: http.server.BaseHTTPRequestHandler,
             else:
                 with open(destination, 'wb') as f:
                     f.write(field.file.read())
-            handler.log_message('[Uploaded] "%s" --> %s', filename, destination)
+            handler.log_message('[Uploaded] "%s" --> %s', relative_path, destination)
             result = (http.HTTPStatus.NO_CONTENT, 'Some filename(s) changed '
                 'due to name conflict' if name_conflict else 'Files accepted')
     
@@ -367,7 +618,20 @@ def receive_mkdir(handler: http.server.BaseHTTPRequestHandler
     # Sanitize folder name - prevent directory traversal or absolute paths
     foldername = os.path.basename(foldername)
     
-    target_path = pathlib.Path(args.directory) / foldername
+    # Get the current path from form data
+    current_path = form.getvalue('path', '/')
+    current_path = current_path.lstrip('/')
+    
+    # Build target directory
+    base_dir = pathlib.Path(args.directory) / current_path
+    base_dir = base_dir.resolve()
+    server_root = pathlib.Path(args.directory).resolve()
+    
+    # Security check: ensure target is within server root
+    if server_root not in base_dir.parents and server_root != base_dir:
+        return (http.HTTPStatus.FORBIDDEN, 'Invalid path')
+    
+    target_path = base_dir / foldername
     
     if os.path.exists(target_path):
         return (http.HTTPStatus.CONFLICT, 'Directory or file already exists')
@@ -558,11 +822,11 @@ class SimpleHTTPRequestHandler(ListDirectoryInterception,
                 self.send_error(http.HTTPStatus.INTERNAL_SERVER_ERROR, "Failed to delete file")
         elif os.path.isdir(target_path):
             try:
-                os.rmdir(target_path)
+                shutil.rmtree(target_path)
                 self.send_response(http.HTTPStatus.NO_CONTENT)
                 self.end_headers()
             except OSError:
-                self.send_error(http.HTTPStatus.CONFLICT, "Directory not empty or in use")
+                self.send_error(http.HTTPStatus.INTERNAL_SERVER_ERROR, "Failed to delete directory")
         else:
             self.send_error(http.HTTPStatus.NOT_FOUND, "File not found")
 
