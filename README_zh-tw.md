@@ -4,6 +4,8 @@
 基於 Densaugeo 優異的 [uploadserver](https://github.com/Densaugeo/uploadserver) 專案修改而來。
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://mit-license.org/)
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/updownserver?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/updownserver)
+![Vibe Coding](https://img.shields.io/badge/Built%20with-Vibe%20Coding-FF69B4?style=flat-square)
 
 ## 主要功能
 
