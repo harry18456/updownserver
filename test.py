@@ -489,6 +489,107 @@ def test_http_basic_auth_example():
         with open('../test-files/basic-auth-example.txt') as f_expected:
             assert f_actual.read() == f_expected.read()
 
+#############################
+# Subdirectory Upload Tests #
+#############################
+
+# Test upload to subdirectory using path parameter
+def test_upload_to_subdirectory():
+    spawn_server()
+    
+    os.mkdir('subdir')
+    
+    res = post('/upload', files=[
+        ('path', (None, '/subdir/')),
+        ('files', ('subdir-file.txt', 'subdir-content')),
+    ])
+    assert res.status_code == 204
+    
+    assert Path('subdir/subdir-file.txt').exists()
+    with open('subdir/subdir-file.txt') as f:
+        assert f.read() == 'subdir-content'
+
+# Test upload with relative path in filenames (folder upload simulation)
+def test_folder_upload_with_relative_paths():
+    spawn_server()
+    
+    res = post('/upload', files=[
+        ('path', (None, '/')),
+        ('files', ('file1.txt', 'content1')),
+        ('files', ('file2.txt', 'content2')),
+        ('filenames', (None, 'folder/file1.txt')),
+        ('filenames', (None, 'folder/file2.txt')),
+    ])
+    assert res.status_code == 204
+    
+    # Check that folder structure was created
+    assert Path('folder').is_dir()
+    assert Path('folder/file1.txt').exists()
+    assert Path('folder/file2.txt').exists()
+    with open('folder/file1.txt') as f:
+        assert f.read() == 'content1'
+    with open('folder/file2.txt') as f:
+        assert f.read() == 'content2'
+
+# Test nested folder upload
+def test_nested_folder_upload():
+    spawn_server()
+    
+    res = post('/upload', files=[
+        ('path', (None, '/')),
+        ('files', ('deep-file.txt', 'deep-content')),
+        ('filenames', (None, 'a/b/c/deep-file.txt')),
+    ])
+    assert res.status_code == 204
+    
+    assert Path('a/b/c/deep-file.txt').exists()
+    with open('a/b/c/deep-file.txt') as f:
+        assert f.read() == 'deep-content'
+
+# Test directory traversal prevention in filenames
+def test_folder_upload_directory_traversal():
+    spawn_server()
+    
+    res = post('/upload', files=[
+        ('path', (None, '/')),
+        ('files', ('traversal-file.txt', 'bad-content')),
+        ('filenames', (None, '../outside/traversal-file.txt')),
+    ])
+    # File should be uploaded but path sanitized to current directory
+    assert res.status_code == 204
+    
+    # File should NOT be outside server root
+    assert not Path('../outside').exists()
+    # File should be in current dir with just filename
+    assert Path('traversal-file.txt').exists()
+
+# Test upload to invalid subdirectory path
+def test_upload_to_invalid_path():
+    spawn_server()
+    
+    res = post('/upload', files=[
+        ('path', (None, '/../escape/')),
+        ('files', ('escape-file.txt', 'escape-content')),
+    ])
+    assert res.status_code == 403
+
+# Test folder upload to subdirectory
+def test_folder_upload_to_subdirectory():
+    spawn_server()
+    
+    os.mkdir('target-subdir')
+    
+    res = post('/upload', files=[
+        ('path', (None, '/target-subdir/')),
+        ('files', ('nested-file.txt', 'nested-content')),
+        ('filenames', (None, 'inner/nested-file.txt')),
+    ])
+    assert res.status_code == 204
+    
+    assert Path('target-subdir/inner/nested-file.txt').exists()
+    with open('target-subdir/inner/nested-file.txt') as f:
+        assert f.read() == 'nested-content'
+
 #################
 # Mkdir Tests   #
 #################
@@ -530,9 +631,23 @@ def test_mkdir_requires_auth():
     assert res.status_code == 401
     assert not Path('unauth-folder').exists()
 
+# Test mkdir in subdirectory
+def test_mkdir_in_subdirectory():
+    spawn_server(basic_auth=TEST_BASIC_AUTH)
+    
+    os.mkdir('parent-dir')
+    
+    res = post('/mkdir', auth=TEST_BASIC_AUTH, files=[
+        ('path', (None, '/parent-dir/')),
+        ('foldername', (None, 'child-folder')),
+    ])
+    assert res.status_code == 201
+    assert Path('parent-dir/child-folder').is_dir()
+
 ##################
 # Delete Tests   #
 ##################
+
 
 def test_delete_file():
     spawn_server(basic_auth=TEST_BASIC_AUTH)
@@ -556,17 +671,20 @@ def test_delete_empty_directory():
     assert res.status_code == 204
     assert not Path('empty-dir-to-delete').exists()
 
+# Test recursive deletion of non-empty directory
 def test_delete_nonempty_directory():
     spawn_server(basic_auth=TEST_BASIC_AUTH)
     
-    os.mkdir('nonempty-dir')
+    os.makedirs('nonempty-dir/subdir', exist_ok=True)
     with open('nonempty-dir/file.txt', 'w') as f:
         f.write('content')
+    with open('nonempty-dir/subdir/nested.txt', 'w') as f:
+        f.write('nested content')
     
     res = requests.delete(f'{PROTOCOL.lower()}://127.0.0.1:8000/nonempty-dir/',
         verify=False, auth=TEST_BASIC_AUTH)
-    assert res.status_code == 409  # Conflict - directory not empty
-    assert Path('nonempty-dir').is_dir()
+    assert res.status_code == 204  # Now supports recursive delete
+    assert not Path('nonempty-dir').exists()
 
 def test_delete_nonexistent():
     spawn_server(basic_auth=TEST_BASIC_AUTH)
